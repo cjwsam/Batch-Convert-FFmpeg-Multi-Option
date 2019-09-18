@@ -9,15 +9,15 @@ As such instead of pushing all through a "standard template" i implimented IF fu
 
 as such 
 
-if Vcodex is equal to h264 
-  then check audio 
-    if Acodex equal to AAC 
-      then check for subs 
-        if SubCodex is present  
-        remove subs copy codex
-        else move on 
-    esle encode audio
- else full encode 
+if Vcodex is equal to h264 <br>
+  then check audio <br>
+    if Acodex equal to AAC <br>
+      then check for subs <br>
+        if SubCodex is present  <br>
+        remove subs copy codex<br>
+        else move on <br>
+    esle encode audio<br>
+ else full encode <br>
  
  
  NOTE:// This Requires both files 
