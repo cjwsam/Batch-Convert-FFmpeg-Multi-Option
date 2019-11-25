@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # Adjust as needed.
-SEARCH_LOCATION="/nas/TV"
+SEARCH_LOCATION="PUT SEARCH DIR HERE"
 LOG_FILE=""
 MIN_SIZE=30M
 FILE_EXTENSIONS=(
