@@ -1,5 +1,14 @@
 #!/bin/bash
 #
+# BatchConvertAutomated.sh - Batch video converter (sequential)
+#
+# Finds video files in SEARCH_LOCATION and converts them one at a time
+# using ConvertAutomated.sh. Shows a progress bar during processing.
+#
+# WARNING: When DELETE_SOURCE_FILES is enabled in ConvertAutomated.sh,
+# original files are permanently deleted after successful conversion.
+# Back up your media before running this script.
+
 # Adjust as needed.
 SEARCH_LOCATION="PUT SEARCH DIR HERE"
 LOG_FILE=""
@@ -14,8 +23,17 @@ FILE_EXTENSIONS=(
     "ts"
 )
 
+# Path to the single-file conversion script (adjust if needed)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CONVERT_SCRIPT="${SCRIPT_DIR}/ConvertAutomated.sh"
+
 # No need to edit below here.
 ################################################################################################
+
+if [ ! -f "$CONVERT_SCRIPT" ]; then
+    echo "Error: ConvertAutomated.sh not found at $CONVERT_SCRIPT"
+    exit 1
+fi
 
 # Progress bar function
 prog() {
@@ -48,8 +66,10 @@ count=0
 total=`echo ${#process_movies[@]}`
 echo -e "\nProcessing results:"
 
-RED='\033[0;31m'
-NC='\033[0m' # No Color
+if [ "$total" -eq "0" ]; then
+    echo "No files found to convert."
+    exit 0
+fi
 
 if [ "$total" -gt "100" ]; then
     SLOW_COMMENT="(this will take a while)"
@@ -62,19 +82,14 @@ for filename in "${process_movies[@]}"; do :
     taskpercent=$((count*100/total))
     shortName="${filename##*/}"
 
-    prog "$taskpercent" $shortName...
- /nas/CONVERT/ConvertAutomated.sh "$filename"
+    prog "$taskpercent" "$shortName"...
+    "$CONVERT_SCRIPT" "$filename"
     exitCode=$?
 
     if [ $exitCode -eq 0 ]; then
-
         prog "$taskpercent" ""
-
     fi
 
 done
 
 echo ""
-
- 
-

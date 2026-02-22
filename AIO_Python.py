@@ -4,6 +4,7 @@ import subprocess
 import hashlib
 import logging
 import json
+import threading
 from pathlib import Path
 from datetime import datetime
 from tqdm import tqdm
@@ -239,34 +240,39 @@ def extract_image_subs_if_any(video_file: Path, image_sub_tracks: list):
         if result.returncode == 0 and out_path.exists() and out_path.stat().st_size > 0:
             logger.info("Extracted image subtitle to %s. Use OCR to convert to SRT if needed.", out_path.name)
 
-def process_video(video_file: Path, idx: int, total: int, processed_set: set, processed_hashes: set):
+def process_video(video_file: Path, idx: int, total: int, processed_set: set, processed_hashes: set, lock: threading.Lock):
     original_path_str = str(video_file.resolve())
-    if original_path_str in processed_set:
-        logger.info("[%d/%d] SKIP (already processed): %s", idx, total, video_file.name)
-        return
+
+    with lock:
+        if original_path_str in processed_set:
+            logger.info("[%d/%d] SKIP (already processed): %s", idx, total, video_file.name)
+            return
 
     # Clean up temporary files using the updated naming scheme
     cleanup_temp_files(video_file)
 
     file_hash = compute_file_hash(video_file)
-    if file_hash and file_hash in processed_hashes:
-        logger.info("[%d/%d] Duplicate detected: %s. Removing.", idx, total, video_file.name)
-        video_file.unlink()
-        processed_set.add(original_path_str)
-        return
-    if file_hash:
-        processed_hashes.add(file_hash)
+    with lock:
+        if file_hash and file_hash in processed_hashes:
+            logger.info("[%d/%d] Duplicate detected: %s. Removing.", idx, total, video_file.name)
+            video_file.unlink()
+            processed_set.add(original_path_str)
+            return
+        if file_hash:
+            processed_hashes.add(file_hash)
 
     logger.info("[%d/%d] Processing: %s", idx, total, video_file.name)
     info = check_video_info(video_file)
     if info["video_codec"] == "unknown" and info["audio_codec"] == "unknown":
         logger.warning("No valid streams in %s", video_file.name)
-        processed_set.add(original_path_str)
+        with lock:
+            processed_set.add(original_path_str)
         return
 
     if SKIP_4K_OR_HDR and is_4k_or_hdr(info["width"], info["height"], info["color_transfer"]):
         logger.info("Detected 4K/HDR in %s. Skipping.", video_file.name)
-        processed_set.add(original_path_str)
+        with lock:
+            processed_set.add(original_path_str)
         return
 
     final_file = video_file
@@ -283,7 +289,8 @@ def process_video(video_file: Path, idx: int, total: int, processed_set: set, pr
             logger.info("Converted to %s", final_file.name)
         else:
             logger.error("Conversion failed for %s", video_file.name)
-            processed_set.add(original_path_str)
+            with lock:
+                processed_set.add(original_path_str)
             return
         info = check_video_info(final_file)
 
@@ -292,8 +299,9 @@ def process_video(video_file: Path, idx: int, total: int, processed_set: set, pr
     if info["image_sub_tracks"]:
         extract_image_subs_if_any(final_file, info["image_sub_tracks"])
 
-    processed_set.add(original_path_str)
-    processed_set.add(str(final_file.resolve()))
+    with lock:
+        processed_set.add(original_path_str)
+        processed_set.add(str(final_file.resolve()))
 
 def scan_video_files(directories: list) -> list:
     video_exts = {".mkv", ".mp4", ".avi", ".mov", ".flv", ".wmv"}
@@ -314,10 +322,11 @@ def main():
 
     processed_set = load_processed_list()
     processed_hashes = load_hash_db()
+    lock = threading.Lock()
 
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
         futures = {
-            executor.submit(process_video, video_file, i, len(all_videos), processed_set, processed_hashes): video_file
+            executor.submit(process_video, video_file, i, len(all_videos), processed_set, processed_hashes, lock): video_file
             for i, video_file in enumerate(all_videos, 1)
         }
         for future in tqdm(as_completed(futures), total=len(futures), desc="Processing videos"):
